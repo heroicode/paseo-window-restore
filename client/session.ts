@@ -12,6 +12,7 @@ export type Bounds = z.infer<typeof BoundsSchema>;
 /** What one desktop window last showed. `sidebarView` is the raw `sidebar-view` value it wrote. */
 export const WindowRecordSchema = z.object({
   id: z.string(),
+  name: z.string().default(""),
   route: z.string().nullable(),
   sidebarView: z.string().nullable(),
   bounds: BoundsSchema,
@@ -22,6 +23,7 @@ export const WindowRecordSchema = z.object({
 export type WindowRecord = z.infer<typeof WindowRecordSchema>;
 
 const SlotSchema = z.object({
+  name: z.string().default(""),
   route: z.string().nullable(),
   sidebarView: z.string().nullable(),
   bounds: BoundsSchema,
@@ -109,7 +111,12 @@ export function closestIndex(records: readonly { bounds: Bounds }[], bounds: Bou
 }
 
 export function toSlot(record: WindowRecord): Slot {
-  return { route: record.route, sidebarView: record.sidebarView, bounds: record.bounds };
+  return {
+    name: record.name,
+    route: record.route,
+    sidebarView: record.sidebarView,
+    bounds: record.bounds,
+  };
 }
 
 /**

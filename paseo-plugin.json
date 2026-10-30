@@ -1,8 +1,9 @@
 {
   "id": "window-restore",
   "name": "Window restore",
+  "description": "Restore desktop windows with their workspaces, filters, positions, and custom names.",
   "media": [],
   "requirements": {
-    "paseo": ">=0.13.2"
+    "paseo": ">=0.14.0"
   }
 }

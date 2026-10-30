@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 import type { z } from "zod";
+import { createTitlePin, type TitleDocument } from "./title";
+import { createWindowNameStore } from "./window-name";
 import {
   closestIndex,
   LastSessionSchema,
@@ -54,6 +56,14 @@ declare const window: {
   // File → New Window. It takes no route and resolves once the new window has loaded.
   paseoDesktop?: { window?: { openNew?: () => Promise<unknown> } };
 };
+declare const document: TitleDocument & { head: unknown };
+declare const MutationObserver: new (callback: () => void) => {
+  observe(
+    target: unknown,
+    options: { childList: boolean; subtree: boolean; characterData: boolean },
+  ): void;
+  disconnect(): void;
+};
 declare const Storage: {
   prototype: { setItem(this: WebStorage, key: string, value: string): void };
 };
@@ -104,6 +114,9 @@ interface Restoring {
 
 interface Controller {
   restoreLastSession(): Promise<boolean>;
+  getWindowName(): string;
+  renameWindow(name: string): void;
+  subscribeWindowName(listener: () => void): () => void;
 }
 
 let controller: Controller | null = null;
@@ -132,6 +145,8 @@ export function startWindowRestore(): () => void {
   // A page that just loaded read `sidebar-view` at startup. A plugin reload inside a running page
   // may come after other windows rewrote it, so keep what this window last wrote.
   const saved = existingId === null ? null : readRecord(existingId);
+  const windowName = createWindowNameStore(saved?.name ?? "");
+  const titlePin = createTitlePin(document, windowName.getName);
   let sidebarView =
     pluginReload && saved ? saved.sidebarView : window.localStorage.getItem(SIDEBAR_VIEW_KEY);
   let route = currentRoute() ?? saved?.route ?? null;
@@ -142,6 +157,7 @@ export function startWindowRestore(): () => void {
   function save(): void {
     writeJson(RECORD_PREFIX + id, {
       id,
+      name: windowName.getName(),
       route,
       sidebarView,
       bounds: currentBounds(),
@@ -161,6 +177,14 @@ export function startWindowRestore(): () => void {
     }
   }
   Storage.prototype.setItem = patchedSetItem;
+
+  const unsubscribeName = windowName.subscribe(() => {
+    save();
+    titlePin.sync();
+  });
+  const titleObserver = new MutationObserver(titlePin.sync);
+  titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
+  titlePin.sync();
 
   const timer = setInterval(() => {
     const next = currentRoute();
@@ -223,6 +247,7 @@ export function startWindowRestore(): () => void {
   /** Puts this window into a slot, reloading unless it already shows that slot. */
   function applySlot(slot: Slot, pending: PendingSlot | null): void {
     moveTo(slot.bounds);
+    windowName.replace(slot.name);
     const sameView = slot.sidebarView === null || slot.sidebarView === sidebarView;
     if (sameView && samePath(slot.route, currentRoute())) return;
     if (pending) window.sessionStorage.setItem(PENDING_SLOT_KEY, JSON.stringify(pending));
@@ -279,6 +304,7 @@ export function startWindowRestore(): () => void {
     // Seeded just before this window loaded, so this is what its sidebar hydrated.
     sidebarView = slot.sidebarView ?? sidebarView;
     route = currentRoute() ?? slot.route;
+    windowName.replace(slot.name);
     save();
     moveTo(slot.bounds);
     channel.postMessage({ type: "applied", planId: plan.id, index: assigned.index });
@@ -356,6 +382,9 @@ export function startWindowRestore(): () => void {
       await restore(snapshot);
       return true;
     },
+    getWindowName: windowName.getName,
+    renameWindow: windowName.rename,
+    subscribeWindowName: windowName.subscribe,
   };
 
   const startedAt = Date.now();
@@ -379,6 +408,9 @@ export function startWindowRestore(): () => void {
     window.removeEventListener("focus", save);
     channel.close();
     if (Storage.prototype.setItem === patchedSetItem) Storage.prototype.setItem = originalSetItem;
+    titleObserver.disconnect();
+    unsubscribeName();
+    titlePin.restore();
     controller = null;
     scope[RUNNING_FLAG] = false;
   };
@@ -387,6 +419,18 @@ export function startWindowRestore(): () => void {
 /** Reopens the windows from the last session that are not open now. */
 export async function restoreLastSession(): Promise<boolean> {
   return (await controller?.restoreLastSession()) ?? false;
+}
+
+export function getWindowName(): string {
+  return controller?.getWindowName() ?? "";
+}
+
+export function renameWindow(name: string): void {
+  controller?.renameWindow(name);
+}
+
+export function subscribeWindowName(listener: () => void): () => void {
+  return controller?.subscribeWindowName(listener) ?? (() => {});
 }
 
 // Internal: app routes are /h/<serverId>/workspace/<id> and similar (packages/app/src/utils/
