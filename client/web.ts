@@ -130,10 +130,10 @@ export function isDesktopWindow(): boolean {
 }
 
 /** Restores the previous session's windows if this is the first window, then tracks this one. */
-export function startWindowRestore(): () => void {
-  if (!isDesktopWindow()) return () => {};
+export function startWindowRestore(): (() => void) | null {
+  if (!isDesktopWindow()) return null;
   const scope = globalThis as unknown as Record<string, unknown>;
-  if (scope[RUNNING_FLAG] === true) return () => {};
+  if (scope[RUNNING_FLAG] === true) return null;
   scope[RUNNING_FLAG] = true;
   const pluginReload = scope[LOADED_FLAG] === true;
   scope[LOADED_FLAG] = true;

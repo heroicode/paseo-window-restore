@@ -15,6 +15,9 @@ import {
 export default function contribute(client: PluginClientContext) {
   if (!isDesktopWindow()) return () => {};
   const stop = startWindowRestore();
+  // Paseo can evaluate a client contribution more than once in the same window.
+  // Only the instance that owns the window controller should register shared UI.
+  if (!stop) return () => {};
   const RenamePopover = createRenamePopover({ getName: getWindowName, rename: renameWindow });
   const renameAction = createRenameAction();
 
