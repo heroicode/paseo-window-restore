@@ -1,8 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createRenameAction } from "../client/rename-action.ts";
 import { WindowRecordSchema, toSlot } from "../client/session.ts";
 import { createTitlePin } from "../client/title.ts";
 import { MAX_WINDOW_NAME_LENGTH, createWindowNameStore } from "../client/window-name.ts";
+
+test("the searchable rename action opens the mounted rename control", () => {
+  const action = createRenameAction();
+  let opens = 0;
+  assert.equal(action.run(), false);
+
+  const unbind = action.bind(() => {
+    opens += 1;
+  });
+  assert.equal(action.run(), true);
+  assert.equal(opens, 1);
+
+  unbind();
+  assert.equal(action.run(), false);
+});
 
 test("window names are trimmed, limited, and observable", () => {
   const store = createWindowNameStore();

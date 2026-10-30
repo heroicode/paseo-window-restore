@@ -1,6 +1,7 @@
 import type { PluginClientContext, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { createRenameAction } from "./client/rename-action";
 import { createRenamePopover } from "./client/rename-popover";
 import {
   getWindowName,
@@ -15,9 +16,14 @@ export default function contribute(client: PluginClientContext) {
   if (!isDesktopWindow()) return () => {};
   const stop = startWindowRestore();
   const RenamePopover = createRenamePopover({ getName: getWindowName, rename: renameWindow });
+  const renameAction = createRenameAction();
 
   function WindowNameItem({ openPopover }: PluginSidebarItemProps) {
     const name = useSyncExternalStore(subscribeWindowName, getWindowName);
+    useEffect(
+      () => renameAction.bind(() => openPopover(RenamePopover)),
+      [openPopover],
+    );
     return (
       <SidebarRow
         icon="AppWindow"
@@ -32,6 +38,17 @@ export default function contribute(client: PluginClientContext) {
     title: "Window name",
     Component: WindowNameItem,
   });
+  const removeRenameCommand = client.addCommandCenterItem({
+    id: "rename-window",
+    title: "Rename this window",
+    icon: "AppWindow",
+    keywords: ["name", "rename", "window", "title", "label"],
+    context: "global",
+    onSelect() {
+      // Let the Command Center close before opening the anchored popover.
+      setTimeout(() => renameAction.run(), 0);
+    },
+  });
   const removeRestoreCommand = client.addCommandCenterItem({
     id: "restore-windows",
     title: "Restore windows from last session",
@@ -44,6 +61,7 @@ export default function contribute(client: PluginClientContext) {
   });
   return () => {
     removeRestoreCommand();
+    removeRenameCommand();
     removeNameItem();
     stop();
   };
