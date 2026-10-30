@@ -1,8 +1,10 @@
 {
   "name": "window-restore",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "license": "MIT",
   "files": [
+    "LICENSE",
     "paseo-plugin.json",
     "OVERVIEW.md",
     "OVERVIEW.*.md",
