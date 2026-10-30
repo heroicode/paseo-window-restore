@@ -1,0 +1,5 @@
+Window restore reopens every Paseo desktop window you had open when Paseo last quit, and puts each one back on its own workspace with its own sidebar Host and Project filters.
+
+Paseo normally reopens a single window, and every window shares one saved sidebar filter. This plugin records each window's route, sidebar filters, and position while it is open. When the first window of a new launch loads, it opens the other windows one at a time, and each reloads into its saved state. Windows you closed before quitting are not reopened. **Restore windows from last session** in the Command Center (⌘K) runs the same restore on demand.
+
+Desktop app only (macOS, Windows, Linux). It relies on Paseo 0.13.2 desktop internals that are not part of the plugin API: the `sidebar-view` local storage key, the app's route format, and the desktop New Window bridge. A Paseo update can change any of these. Windows reopen on the current desktop or Space, and positions are restored only where the operating system allows it. Everything is stored in the app's local storage; nothing leaves the machine.

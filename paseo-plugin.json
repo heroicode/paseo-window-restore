@@ -1,0 +1,8 @@
+{
+  "id": "window-restore",
+  "name": "Window restore",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.13.2"
+  }
+}
