@@ -1,12 +1,26 @@
 import type { PluginPopoverProps } from "@getpaseo/plugin/client";
 import { TextInput } from "@getpaseo/plugin/client/ui";
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, Text, View, type TextInput as NativeTextInput } from "react-native";
 import { MAX_WINDOW_NAME_LENGTH, type WindowNameStore } from "./window-name";
 
 export function createRenamePopover(store: Pick<WindowNameStore, "getName" | "rename">) {
   return function RenamePopover({ theme, close }: PluginPopoverProps) {
     const [draft, setDraft] = useState(store.getName);
+    const inputRef = useRef<NativeTextInput>(null);
+
+    useEffect(() => {
+      // Paseo measures an anchored popover off-screen, then remounts it in its final position.
+      // Focus after that remount so the measuring surface cannot take focus back from the input.
+      let focusFrame = 0;
+      const placementFrame = requestAnimationFrame(() => {
+        focusFrame = requestAnimationFrame(() => inputRef.current?.focus());
+      });
+      return () => {
+        cancelAnimationFrame(placementFrame);
+        cancelAnimationFrame(focusFrame);
+      };
+    }, []);
 
     const save = () => {
       store.rename(draft);
@@ -16,7 +30,7 @@ export function createRenamePopover(store: Pick<WindowNameStore, "getName" | "re
     return (
       <View style={{ padding: 12, gap: 8, minWidth: 240 }}>
         <TextInput
-          autoFocus
+          ref={inputRef}
           selectTextOnFocus
           value={draft}
           onChangeText={setDraft}
