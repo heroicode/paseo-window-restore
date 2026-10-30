@@ -56,7 +56,15 @@ declare const window: {
   // File → New Window. It takes no route and resolves once the new window has loaded.
   paseoDesktop?: { window?: { openNew?: () => Promise<unknown> } };
 };
-declare const document: TitleDocument & { head: unknown };
+declare const document: TitleDocument & {
+  head: unknown;
+  documentElement: {
+    hasAttribute(name: string): boolean;
+    getAttribute(name: string): string | null;
+    setAttribute(name: string, value: string): void;
+    removeAttribute(name: string): void;
+  };
+};
 declare const MutationObserver: new (callback: () => void) => {
   observe(
     target: unknown,
@@ -84,7 +92,10 @@ const LAST_SESSION_KEY = "window-restore:last-session";
 const WINDOW_ID_KEY = "window-restore:id";
 const PENDING_SLOT_KEY = "window-restore:pending-slot";
 const CHANNEL_NAME = "window-restore";
-// `contribute` runs once per connected host in each window; these globals live as long as the page.
+// `contribute` runs once per connected host in each window. Paseo evaluates those contributions in
+// isolated JavaScript worlds, so the DOM marker is the cross-world singleton and the globals handle
+// repeated evaluation inside one world.
+const RUNNING_MARKER = "data-paseo-window-restore-running";
 const RUNNING_FLAG = "__paseoWindowRestoreRunning";
 const LOADED_FLAG = "__paseoWindowRestoreLoaded";
 
@@ -133,7 +144,10 @@ export function isDesktopWindow(): boolean {
 export function startWindowRestore(): (() => void) | null {
   if (!isDesktopWindow()) return null;
   const scope = globalThis as unknown as Record<string, unknown>;
-  if (scope[RUNNING_FLAG] === true) return null;
+  const root = document.documentElement;
+  if (scope[RUNNING_FLAG] === true || root.hasAttribute(RUNNING_MARKER)) return null;
+  const owner = createId();
+  root.setAttribute(RUNNING_MARKER, owner);
   scope[RUNNING_FLAG] = true;
   const pluginReload = scope[LOADED_FLAG] === true;
   scope[LOADED_FLAG] = true;
@@ -413,6 +427,7 @@ export function startWindowRestore(): (() => void) | null {
     titlePin.restore();
     controller = null;
     scope[RUNNING_FLAG] = false;
+    if (root.getAttribute(RUNNING_MARKER) === owner) root.removeAttribute(RUNNING_MARKER);
   };
 }
 
