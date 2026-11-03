@@ -1,4 +1,6 @@
-Window restore reopens every Paseo desktop window you had open when Paseo last quit, and puts each one back on its own workspace with its own sidebar Host and Project filters, position, and custom name. Select **Name this window** at the top of the sidebar, or search for **Rename this window** in the Command Center, to name it. The name appears in the operating system's window title and returns with that window after a restart.
+Window restore reopens every Paseo desktop window you had open when Paseo last quit, and puts each one back on its own workspace with its own sidebar Host and Project filters and position.
+
+Windows can also have custom names, which are hidden by default. Turn off **Hide window names** in the plugin's settings to use them. Then select **Name this window** at the top of the sidebar, or search for **Rename this window** in the Command Center, to name a window. The name appears in the operating system's window title and returns with that window after a restart. Turning names back off hides them without deleting them.
 
 Paseo normally reopens a single window, and every window shares one saved sidebar filter. This plugin records each window's route, sidebar filters, position, and name while it is open. When the first window of a new launch loads, it opens the other windows one at a time, and each reloads into its saved state. Windows you closed before quitting are not reopened. **Restore windows from last session** in the Command Center (⌘K) runs the same restore on demand.
 

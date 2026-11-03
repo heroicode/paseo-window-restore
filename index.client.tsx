@@ -3,12 +3,16 @@ import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { useEffect, useSyncExternalStore } from "react";
 import { createRenameAction } from "./client/rename-action";
 import { createRenamePopover } from "./client/rename-popover";
+import { createSettingsScreen } from "./client/settings-screen";
 import {
   getWindowName,
   isDesktopWindow,
+  namesHidden,
   renameWindow,
   restoreLastSession,
+  setNamesHidden,
   startWindowRestore,
+  subscribeNamesHidden,
   subscribeWindowName,
 } from "./client/web";
 
@@ -36,21 +40,51 @@ export default function contribute(client: PluginClientContext) {
     );
   }
 
-  const removeNameItem = client.addSidebarHeaderItem({
-    id: "window-name",
-    title: "Window name",
-    Component: WindowNameItem,
-  });
-  const removeRenameCommand = client.addCommandCenterItem({
-    id: "rename-window",
-    title: "Rename this window",
+  function addNameUi(): () => void {
+    const removeNameItem = client.addSidebarHeaderItem({
+      id: "window-name",
+      title: "Window name",
+      Component: WindowNameItem,
+    });
+    const removeRenameCommand = client.addCommandCenterItem({
+      id: "rename-window",
+      title: "Rename this window",
+      icon: "AppWindow",
+      keywords: ["name", "rename", "window", "title", "label"],
+      context: "global",
+      onSelect() {
+        // Let the Command Center close before opening the anchored popover.
+        setTimeout(() => renameAction.run(), 0);
+      },
+    });
+    return () => {
+      removeRenameCommand();
+      removeNameItem();
+    };
+  }
+
+  // Names are optional, so their sidebar row and command exist only while names are shown.
+  let removeNameUi: (() => void) | null = null;
+  function syncNameUi() {
+    if (namesHidden()) {
+      removeNameUi?.();
+      removeNameUi = null;
+    } else {
+      removeNameUi ??= addNameUi();
+    }
+  }
+  syncNameUi();
+  const unsubscribeNamesHidden = subscribeNamesHidden(syncNameUi);
+
+  const removeSettings = client.addSettingsScreen({
+    id: "settings",
+    title: "Window restore",
     icon: "AppWindow",
-    keywords: ["name", "rename", "window", "title", "label"],
-    context: "global",
-    onSelect() {
-      // Let the Command Center close before opening the anchored popover.
-      setTimeout(() => renameAction.run(), 0);
-    },
+    Component: createSettingsScreen({
+      hidden: namesHidden,
+      setHidden: setNamesHidden,
+      subscribe: subscribeNamesHidden,
+    }),
   });
   const removeRestoreCommand = client.addCommandCenterItem({
     id: "restore-windows",
@@ -64,8 +98,9 @@ export default function contribute(client: PluginClientContext) {
   });
   return () => {
     removeRestoreCommand();
-    removeRenameCommand();
-    removeNameItem();
+    removeSettings();
+    unsubscribeNamesHidden();
+    removeNameUi?.();
     stop();
   };
 }

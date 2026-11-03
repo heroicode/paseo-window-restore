@@ -1,9 +1,11 @@
 import { Platform } from "react-native";
 import type { z } from "zod";
+import { createNamesSetting } from "./names-setting";
 import { createTitlePin, type TitleDocument } from "./title";
 import { createWindowNameStore } from "./window-name";
 import {
   closestIndex,
+  hasArea,
   LastSessionSchema,
   MessageSchema,
   PendingSlotSchema,
@@ -38,7 +40,7 @@ interface Channel {
   close(): void;
 }
 
-type WindowEvent = "pagehide" | "focus";
+type WindowEvent = "pagehide" | "focus" | "storage";
 
 declare const window: {
   localStorage: WebStorage;
@@ -128,6 +130,9 @@ interface Controller {
   getWindowName(): string;
   renameWindow(name: string): void;
   subscribeWindowName(listener: () => void): () => void;
+  namesHidden(): boolean;
+  setNamesHidden(hidden: boolean): void;
+  subscribeNamesHidden(listener: () => void): () => void;
 }
 
 let controller: Controller | null = null;
@@ -160,21 +165,26 @@ export function startWindowRestore(): (() => void) | null {
   // may come after other windows rewrote it, so keep what this window last wrote.
   const saved = existingId === null ? null : readRecord(existingId);
   const windowName = createWindowNameStore(saved?.name ?? "");
-  const titlePin = createTitlePin(document, windowName.getName);
+  // Hiding names leaves the saved name alone, so it returns when names are turned back on.
+  const namesSetting = createNamesSetting(window.localStorage);
+  const titlePin = createTitlePin(document, () => (namesSetting.hidden() ? "" : windowName.getName()));
   let sidebarView =
     pluginReload && saved ? saved.sidebarView : window.localStorage.getItem(SIDEBAR_VIEW_KEY);
   let route = currentRoute() ?? saved?.route ?? null;
+  let bounds = saved?.bounds ?? null;
   let lastSave = 0;
   let restoring: Restoring | null = null;
   let onAssign: ((message: AssignMessage) => void) | null = null;
 
   function save(): void {
+    const now = currentBounds();
+    if (hasArea(now) || bounds === null) bounds = now;
     writeJson(RECORD_PREFIX + id, {
       id,
       name: windowName.getName(),
       route,
       sidebarView,
-      bounds: currentBounds(),
+      bounds,
       seenAt: Date.now(),
     } satisfies WindowRecord);
     lastSave = Date.now();
@@ -196,6 +206,7 @@ export function startWindowRestore(): (() => void) | null {
     save();
     titlePin.sync();
   });
+  const unsubscribeNamesSetting = namesSetting.subscribe(titlePin.sync);
   const titleObserver = new MutationObserver(titlePin.sync);
   titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
   titlePin.sync();
@@ -218,6 +229,8 @@ export function startWindowRestore(): (() => void) | null {
   }
   window.addEventListener("pagehide", onPageHide);
   window.addEventListener("focus", save);
+  // Fires only in the other windows when one of them changes the shared setting.
+  window.addEventListener("storage", namesSetting.refresh);
 
   const channel = new BroadcastChannel(CHANNEL_NAME);
   const pongs = new Set<string>();
@@ -399,6 +412,9 @@ export function startWindowRestore(): (() => void) | null {
     getWindowName: windowName.getName,
     renameWindow: windowName.rename,
     subscribeWindowName: windowName.subscribe,
+    namesHidden: namesSetting.hidden,
+    setNamesHidden: namesSetting.setHidden,
+    subscribeNamesHidden: namesSetting.subscribe,
   };
 
   const startedAt = Date.now();
@@ -420,10 +436,12 @@ export function startWindowRestore(): (() => void) | null {
     clearInterval(timer);
     window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("focus", save);
+    window.removeEventListener("storage", namesSetting.refresh);
     channel.close();
     if (Storage.prototype.setItem === patchedSetItem) Storage.prototype.setItem = originalSetItem;
     titleObserver.disconnect();
     unsubscribeName();
+    unsubscribeNamesSetting();
     titlePin.restore();
     controller = null;
     scope[RUNNING_FLAG] = false;
@@ -448,6 +466,18 @@ export function subscribeWindowName(listener: () => void): () => void {
   return controller?.subscribeWindowName(listener) ?? (() => {});
 }
 
+export function namesHidden(): boolean {
+  return controller?.namesHidden() ?? true;
+}
+
+export function setNamesHidden(hidden: boolean): void {
+  controller?.setNamesHidden(hidden);
+}
+
+export function subscribeNamesHidden(listener: () => void): () => void {
+  return controller?.subscribeNamesHidden(listener) ?? (() => {});
+}
+
 // Internal: app routes are /h/<serverId>/workspace/<id> and similar (packages/app/src/utils/
 // host-routes.ts). Other pages, such as settings, keep the last host route.
 function currentRoute(): string | null {
@@ -470,6 +500,8 @@ function currentBounds(): Bounds {
 }
 
 function moveTo(bounds: Bounds): void {
+  // Records saved before empty geometry was ignored can still hold it.
+  if (!hasArea(bounds)) return;
   try {
     window.moveTo(bounds.x, bounds.y);
     window.resizeTo(bounds.width, bounds.height);

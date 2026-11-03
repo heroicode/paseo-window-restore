@@ -92,6 +92,11 @@ export function previousSession(records: readonly WindowRecord[]): WindowRecord[
   return records.filter((record) => (record.closedAt ?? 0) >= lastClosed - CLOSED_TOGETHER_MS);
 }
 
+/** False for the empty geometry a window reports once its native window is gone, as during quit. */
+export function hasArea(bounds: Bounds): boolean {
+  return bounds.width > 0 && bounds.height > 0;
+}
+
 /** Index of the record whose window geometry is nearest `bounds`. */
 export function closestIndex(records: readonly { bounds: Bounds }[], bounds: Bounds): number {
   let best = 0;
