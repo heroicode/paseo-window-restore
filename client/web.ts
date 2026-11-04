@@ -11,7 +11,10 @@ import {
   PendingSlotSchema,
   PlanSchema,
   previousSession,
+  sameTheme,
+  themeFromSettings,
   toSlot,
+  withTheme,
   WindowRecordSchema,
   workspaceSelectionFromRoute,
   type AssignMessage,
@@ -21,10 +24,12 @@ import {
   type Plan,
   type Slot,
   type WindowRecord,
+  type WindowTheme,
 } from "./session";
 
-// Paseo 0.13.2 gives plugins no API for desktop windows, the current route, or the sidebar's Host
-// and Project filters. This module reaches each through desktop app internals, named where used.
+// Paseo 0.13.2 gives plugins no API for desktop windows, the current route, the sidebar's Host
+// and Project filters, or the theme. This module reaches each through desktop app internals, named
+// where used.
 
 interface WebStorage {
   readonly length: number;
@@ -86,6 +91,10 @@ const SIDEBAR_VIEW_KEY = "sidebar-view";
 // Internal: the workspace a window opens on at "/" (packages/app/src/stores/
 // last-workspace-selection.ts). Also shared, and also read only while loading.
 const LAST_WORKSPACE_KEY = "paseo:last-workspace-route-selection";
+// Internal: the app settings AsyncStorage blob (packages/app/src/hooks/use-settings/keys.ts). Each
+// window loads it once and rewrites all of it from memory on any change, so its `theme` and
+// `pluginThemeId` are those of the last window to change any setting.
+const APP_SETTINGS_KEY = "@paseo:app-settings";
 
 const RECORD_PREFIX = "window-restore:window:";
 const PLAN_KEY = "window-restore:plan";
@@ -170,6 +179,9 @@ export function startWindowRestore(): (() => void) | null {
   const titlePin = createTitlePin(document, () => (namesSetting.hidden() ? "" : windowName.getName()));
   let sidebarView =
     pluginReload && saved ? saved.sidebarView : window.localStorage.getItem(SIDEBAR_VIEW_KEY);
+  let theme: WindowTheme | null =
+    (pluginReload ? saved?.theme : null) ??
+    themeFromSettings(window.localStorage.getItem(APP_SETTINGS_KEY));
   let route = currentRoute() ?? saved?.route ?? null;
   let bounds = saved?.bounds ?? null;
   let lastSave = 0;
@@ -184,6 +196,7 @@ export function startWindowRestore(): (() => void) | null {
       name: windowName.getName(),
       route,
       sidebarView,
+      theme,
       bounds,
       seenAt: Date.now(),
     } satisfies WindowRecord);
@@ -191,13 +204,20 @@ export function startWindowRestore(): (() => void) | null {
   }
 
   // The app writes `sidebar-view` through localStorage.setItem whenever this window's filters
-  // change. Other windows' writes land in their own renderers and never reach this patch.
+  // change, and `@paseo:app-settings` whenever any of its settings, such as the theme, change.
+  // Other windows' writes land in their own renderers and never reach this patch.
   const originalSetItem = Storage.prototype.setItem;
   function patchedSetItem(this: WebStorage, key: string, value: string): void {
     originalSetItem.call(this, key, value);
     if (this === window.localStorage && key === SIDEBAR_VIEW_KEY) {
       sidebarView = value;
       save();
+    } else if (this === window.localStorage && key === APP_SETTINGS_KEY) {
+      const next = themeFromSettings(value);
+      if (next !== null && !sameTheme(next, theme)) {
+        theme = next;
+        save();
+      }
     }
   }
   Storage.prototype.setItem = patchedSetItem;
@@ -269,13 +289,18 @@ export function startWindowRestore(): (() => void) | null {
     if (slot.sidebarView !== null) write(SIDEBAR_VIEW_KEY, slot.sidebarView);
     const selection = workspaceSelectionFromRoute(slot.route);
     if (selection) write(LAST_WORKSPACE_KEY, JSON.stringify(selection));
+    if (slot.theme !== null) {
+      write(APP_SETTINGS_KEY, withTheme(window.localStorage.getItem(APP_SETTINGS_KEY), slot.theme));
+    }
   }
 
   /** Puts this window into a slot, reloading unless it already shows that slot. */
   function applySlot(slot: Slot, pending: PendingSlot | null): void {
     moveTo(slot.bounds);
     windowName.replace(slot.name);
-    const sameView = slot.sidebarView === null || slot.sidebarView === sidebarView;
+    const sameView =
+      (slot.sidebarView === null || slot.sidebarView === sidebarView) &&
+      (slot.theme === null || sameTheme(slot.theme, theme));
     if (sameView && samePath(slot.route, currentRoute())) return;
     if (pending) window.sessionStorage.setItem(PENDING_SLOT_KEY, JSON.stringify(pending));
     seed(slot, (key, value) => window.localStorage.setItem(key, value));
@@ -330,6 +355,7 @@ export function startWindowRestore(): (() => void) | null {
     }
     // Seeded just before this window loaded, so this is what its sidebar hydrated.
     sidebarView = slot.sidebarView ?? sidebarView;
+    theme = slot.theme ?? theme;
     route = currentRoute() ?? slot.route;
     windowName.replace(slot.name);
     save();

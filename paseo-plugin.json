@@ -1,7 +1,7 @@
 {
   "id": "window-restore",
   "name": "Window restore",
-  "description": "Restore desktop windows with their workspaces, filters, positions, and custom names.",
+  "description": "Restore desktop windows with their workspaces, filters, themes, positions, and custom names.",
   "media": [
     "images/restored.png",
     "images/restore-command.png",

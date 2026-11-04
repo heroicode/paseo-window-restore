@@ -9,12 +9,24 @@ const BoundsSchema = z.object({
 
 export type Bounds = z.infer<typeof BoundsSchema>;
 
-/** What one desktop window last showed. `sidebarView` is the raw `sidebar-view` value it wrote. */
+/** The `theme` and `pluginThemeId` fields of the app settings a window last wrote. */
+const WindowThemeSchema = z.object({
+  theme: z.string(),
+  pluginThemeId: z.string().nullable(),
+});
+
+export type WindowTheme = z.infer<typeof WindowThemeSchema>;
+
+/**
+ * What one desktop window last showed. `sidebarView` is the raw `sidebar-view` value it wrote;
+ * `theme` is null in records saved before themes were tracked.
+ */
 export const WindowRecordSchema = z.object({
   id: z.string(),
   name: z.string().default(""),
   route: z.string().nullable(),
   sidebarView: z.string().nullable(),
+  theme: WindowThemeSchema.nullable().default(null),
   bounds: BoundsSchema,
   seenAt: z.number(),
   closedAt: z.number().optional(),
@@ -26,6 +38,7 @@ const SlotSchema = z.object({
   name: z.string().default(""),
   route: z.string().nullable(),
   sidebarView: z.string().nullable(),
+  theme: WindowThemeSchema.nullable().default(null),
   bounds: BoundsSchema,
 });
 
@@ -120,8 +133,38 @@ export function toSlot(record: WindowRecord): Slot {
     name: record.name,
     route: record.route,
     sidebarView: record.sidebarView,
+    theme: record.theme,
     bounds: record.bounds,
   };
+}
+
+/** The theme in a raw `@paseo:app-settings` value, or null when it holds none. */
+export function themeFromSettings(raw: string | null): WindowTheme | null {
+  const settings = parseSettings(raw);
+  if (typeof settings.theme !== "string") return null;
+  const pluginThemeId = typeof settings.pluginThemeId === "string" ? settings.pluginThemeId : null;
+  return { theme: settings.theme, pluginThemeId };
+}
+
+/** A raw `@paseo:app-settings` value with its theme replaced and every other setting kept. */
+export function withTheme(raw: string | null, theme: WindowTheme): string {
+  return JSON.stringify({ ...parseSettings(raw), ...theme });
+}
+
+export function sameTheme(a: WindowTheme | null, b: WindowTheme | null): boolean {
+  return a?.theme === b?.theme && a?.pluginThemeId === b?.pluginThemeId;
+}
+
+function parseSettings(raw: string | null): Record<string, unknown> {
+  if (raw === null) return {};
+  try {
+    const value: unknown = JSON.parse(raw);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
