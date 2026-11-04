@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import type { z } from "zod";
 import { createNamesSetting } from "./names-setting";
+import { addNameRowStyle, type StyleDocument } from "./name-row-style";
 import { createTitlePin, type TitleDocument } from "./title";
 import { createWindowNameStore } from "./window-name";
 import {
@@ -63,15 +64,15 @@ declare const window: {
   // File → New Window. It takes no route and resolves once the new window has loaded.
   paseoDesktop?: { window?: { openNew?: () => Promise<unknown> } };
 };
-declare const document: TitleDocument & {
-  head: unknown;
-  documentElement: {
-    hasAttribute(name: string): boolean;
-    getAttribute(name: string): string | null;
-    setAttribute(name: string, value: string): void;
-    removeAttribute(name: string): void;
+declare const document: TitleDocument &
+  StyleDocument & {
+    documentElement: {
+      hasAttribute(name: string): boolean;
+      getAttribute(name: string): string | null;
+      setAttribute(name: string, value: string): void;
+      removeAttribute(name: string): void;
+    };
   };
-};
 declare const MutationObserver: new (callback: () => void) => {
   observe(
     target: unknown,
@@ -473,6 +474,11 @@ export function startWindowRestore(): (() => void) | null {
     scope[RUNNING_FLAG] = false;
     if (root.getAttribute(RUNNING_MARKER) === owner) root.removeAttribute(RUNNING_MARKER);
   };
+}
+
+/** Keeps the sidebar row with `testId` to one line, ending a long name with an ellipsis. */
+export function styleNameRow(testId: string): () => void {
+  return addNameRowStyle(document, testId);
 }
 
 /** Reopens the windows from the last session that are not open now. */

@@ -12,9 +12,14 @@ import {
   restoreLastSession,
   setNamesHidden,
   startWindowRestore,
+  styleNameRow,
   subscribeNamesHidden,
   subscribeWindowName,
 } from "./client/web";
+
+// Matches `id` in paseo-plugin.json.
+const PLUGIN_ID = "window-restore";
+const NAME_ITEM_ID = "window-name";
 
 export default function contribute(client: PluginClientContext) {
   if (!isDesktopWindow()) return () => {};
@@ -41,8 +46,9 @@ export default function contribute(client: PluginClientContext) {
   }
 
   function addNameUi(): () => void {
+    const removeRowStyle = styleNameRow(`plugin-sidebar-${PLUGIN_ID}-${NAME_ITEM_ID}`);
     const removeNameItem = client.addSidebarHeaderItem({
-      id: "window-name",
+      id: NAME_ITEM_ID,
       title: "Window name",
       Component: WindowNameItem,
     });
@@ -60,6 +66,7 @@ export default function contribute(client: PluginClientContext) {
     return () => {
       removeRenameCommand();
       removeNameItem();
+      removeRowStyle();
     };
   }
 
